@@ -1,0 +1,21 @@
+@if (status() === 'loading') {
+  <mat-progress-spinner mode="indeterminate" diameter="50"></mat-progress-spinner>
+}
+<div
+  class="preload-background"
+  [style.background]="'url(' + thumbnail() + ') 50% 50% / cover no-repeat'"
+  [class.blur]="
+    status() !== 'loaded' &&
+    !['/assets/nsfw.png', '/assets/default.png'].includes(thumbnail())
+  "
+  >
+  <video
+    #gifPlayer
+    playsInline
+    preload="none"
+    [loop]="true"
+    [muted]="true"
+    [src]="src()"
+    (click)="togglePlay$.next()"
+  ></video>
+</div>

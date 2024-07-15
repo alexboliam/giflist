@@ -1,0 +1,8 @@
+@for (gif of gifs(); track gif.permalink) {
+  <div>
+    <app-gif-player
+      [src]="gif.src"
+      [thumbnail]="gif.thumbnail"
+    ></app-gif-player>
+  </div>
+}
