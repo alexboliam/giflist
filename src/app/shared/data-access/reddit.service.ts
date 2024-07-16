@@ -1,7 +1,7 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { Gif, RedditPost, RedditResponse } from "../interfaces";
-import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, map, Observable, of, startWith, Subject, switchMap } from "rxjs";
+import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, expand, map, Observable, of, startWith, Subject, switchMap } from "rxjs";
 import { HttpClient } from "@angular/common/http";
 import { FormControl } from "@angular/forms";
 
@@ -51,7 +51,17 @@ export class RedditService {
     switchMap((subreddit) => 
       this.pagination$.pipe(
         startWith(null),
-        concatMap((lastKnownGif) => this.fetchFromReddit(subreddit, lastKnownGif, 20))
+        concatMap((lastKnownGif) => this.fetchFromReddit(subreddit, lastKnownGif, 20).pipe(
+          expand((response, index) => {
+            const { gifs, gifsRequired, lastKnownGif } = response;
+            const remainingGifsToFetch = gifsRequired - gifs.length;
+            const maxAttempts = 15;
+
+            const shouldKeepTrying = remainingGifsToFetch > 0 && index < maxAttempts && lastKnownGif !== null;
+
+            return shouldKeepTrying ? this.fetchFromReddit(subreddit, lastKnownGif, remainingGifsToFetch) : EMPTY;
+          })
+        ))
       ))
   );
   //#endregion
