@@ -1,1 +1,12 @@
-<app-gif-list [gifs]="redditService.gifs()" class="grid-container"></app-gif-list>
+<app-search-bar
+      [subredditFormControl]="redditService.subredditFormControl"
+></app-search-bar>
+@if (redditService.loading()) {
+  <mat-progress-spinner mode="indeterminate" diameter="50" />
+} @else {
+  <app-gif-list
+    [gifs]="redditService.gifs()"
+    class="grid-container"
+    (scrolled)="redditService.pagination$.next(redditService.lastKnownGif())"
+  ></app-gif-list>
+}
