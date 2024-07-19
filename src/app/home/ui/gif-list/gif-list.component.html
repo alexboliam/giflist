@@ -3,6 +3,19 @@
     <app-gif-player
       [src]="gif.src"
       [thumbnail]="gif.thumbnail"
+      data-testid="gif-list-item"
     ></app-gif-player>
+    <mat-toolbar color="primary">
+      <span>{{ gif.title }}</span>
+      <span class="toolbar-spacer"></span>
+      <button
+        mat-icon-button
+        (click)="window.open('https://reddit.com/' + gif.permalink)"
+      >
+        <mat-icon>comment</mat-icon>
+      </button>
+    </mat-toolbar>
   </div>
+} @empty {
+  <p>Can't find any gifs 🤷</p>
 }

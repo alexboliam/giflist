@@ -1,9 +1,21 @@
 import { computed, inject, Injectable, signal } from "@angular/core";
 import { takeUntilDestroyed } from "@angular/core/rxjs-interop";
 import { Gif, RedditPost, RedditResponse } from "../interfaces";
-import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, expand, map, Observable, of, startWith, Subject, switchMap } from "rxjs";
-import { HttpClient } from "@angular/common/http";
+import {
+  catchError,
+  concatMap,
+  debounceTime,
+  distinctUntilChanged,
+  EMPTY,
+  expand,
+  map,
+  startWith,
+  Subject,
+  switchMap
+} from "rxjs";
+import { HttpClient, HttpErrorResponse } from "@angular/common/http";
 import { FormControl } from "@angular/forms";
+import { RandomSubreddit } from "@shared/constants/lists";
 
 export interface GifsState {
   gifs: Gif[],
@@ -19,7 +31,7 @@ export class RedditService {
   private http = inject(HttpClient);
   subredditFormControl = new FormControl();
 
-  defaultSubreddit = 'gifs';
+  defaultSubreddit = RandomSubreddit();
 
   //#region state
   private state = signal<GifsState>({
@@ -64,6 +76,8 @@ export class RedditService {
         ))
       ))
   );
+
+  private error$ = new Subject<string | null>();
   //#endregion
 
   constructor() {
@@ -85,6 +99,13 @@ export class RedditService {
         lastKnownGif: null,
       }));
     });
+
+    this.error$.pipe(takeUntilDestroyed()).subscribe((error) => {
+      this.state.update((state) => ({
+        ...state,
+        error,
+      }));
+    });
     //#endregion
   }
 
@@ -92,7 +113,10 @@ export class RedditService {
     return this.http
       .get<RedditResponse>(`https://www.reddit.com/r/${subreddit}/hot/.json?limit=100` + (after ? `&after=${after}` : ''))
       .pipe(
-        catchError((err) => EMPTY),
+        catchError((err) => {
+          this.handleError(err);
+          return EMPTY;
+        }),
         map((response) => {
           const posts = response.data.children;
           const lastKnownGif = posts.length ? posts[posts.length - 1].data.name : null;
@@ -156,5 +180,14 @@ export class RedditService {
     }
 
     return null;
+  }
+
+  private handleError(err: HttpErrorResponse) {
+    if (err.status === 404 && err.url) {
+      this.error$.next(`Failed to load gifs for /r/${err.url.split('/')[4]}`);
+      return;
+    }
+
+    this.error$.next(err.statusText);
   }
 }
