@@ -1,7 +1,8 @@
 import { Component, computed, effect, ElementRef, input, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { fromEvent, Subject, switchMap } from 'rxjs';
+import { fromEvent, map, merge, Subject, switchMap } from 'rxjs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { connect } from 'ngxtension/connect';
 
 interface GifPlayerState {
   playing: boolean;
@@ -47,23 +48,14 @@ export class GifPlayerComponent {
 
   constructor() {
     //#region reducers
-    this.videoLoadStart$
-      .pipe(takeUntilDestroyed())
-      .subscribe(() =>
-        this.state.update((state) => ({ ...state, status: 'loaded' }))
-      );
-    
-    this.videoLoadComplete$
-      .pipe(takeUntilDestroyed())
-      .subscribe(() =>
-        this.state.update((state) => ({ ...state, status: 'loaded' }))
-      );
+    var nextState$ = merge(
+      this.videoLoadStart$.pipe(map(() => ({ status: 'loading' as const }))),
+      this.videoLoadComplete$.pipe(map(() => ({ status: 'loaded' as const }))),
+    );
 
-    this.togglePlay$
-      .pipe(takeUntilDestroyed())
-      .subscribe(() =>
-        this.state.update((state) => ({ ...state, playing: !state.playing }))
-      );
+    connect(this.state)
+      .with(nextState$)
+      .with(this.togglePlay$, (state) => ({ ...state, playing: !state.playing }));
     //#endregion
 
     effect(() => {

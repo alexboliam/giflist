@@ -31,5 +31,3 @@ export const SubredditsList = () =>
     "dogs",
     "helltaker",
   ];
-
-export const RandomSubreddit = () => SubredditsList()[Math.floor(Math.random()*SubredditsList().length)];

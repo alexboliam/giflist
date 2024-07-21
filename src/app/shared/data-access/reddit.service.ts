@@ -9,13 +9,15 @@ import {
   EMPTY,
   expand,
   map,
+  merge,
   startWith,
   Subject,
   switchMap
 } from "rxjs";
 import { HttpClient, HttpErrorResponse } from "@angular/common/http";
 import { FormControl } from "@angular/forms";
-import { RandomSubreddit } from "@shared/constants/lists";
+import { SubredditsList } from "@shared/constants/lists";
+import { connect } from "ngxtension/connect";
 
 export interface GifsState {
   gifs: Gif[],
@@ -31,7 +33,7 @@ export class RedditService {
   private http = inject(HttpClient);
   subredditFormControl = new FormControl();
 
-  defaultSubreddit = RandomSubreddit();
+  defaultSubreddit = this.getRandomSubreddit();
 
   //#region state
   private state = signal<GifsState>({
@@ -51,6 +53,8 @@ export class RedditService {
 
   //#region sources
   pagination$ = new Subject<string | null>();
+
+  randomSubreddit$ = new Subject<void>();
   
   private subredditChanged$ = this.subredditFormControl.valueChanges.pipe(
     debounceTime(300),
@@ -82,65 +86,63 @@ export class RedditService {
 
   constructor() {
     //#region reducers
-    this.gifsLoaded$.pipe(takeUntilDestroyed()).subscribe((response) => 
-      this.state.update((state) => ({
-        ...state,
+    const nextState$ = merge(
+      this.subredditChanged$.pipe(
+        map(() => ({
+          loading: true,
+          gifs: [],
+          lastKnownGif: null,
+        }))
+      ),
+      this.error$.pipe(map((error) => ({ error }))),
+    );
+
+    connect(this.state)
+      .with(nextState$)
+      .with(this.gifsLoaded$, (state, response) => ({
         gifs: [...state.gifs, ...response.gifs],
         loading: false,
         lastKnownGif: response.lastKnownGif,
-      }))
-    );
-
-    this.subredditChanged$.pipe(takeUntilDestroyed()).subscribe(() => {
-      this.state.update((state) => ({
-        ...state,
-        loading: true,
-        gifs: [],
-        lastKnownGif: null,
       }));
-    });
 
-    this.error$.pipe(takeUntilDestroyed()).subscribe((error) => {
-      this.state.update((state) => ({
-        ...state,
-        error,
-      }));
+    this.randomSubreddit$.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.subredditFormControl.patchValue(this.getRandomSubreddit());
     });
     //#endregion
   }
-
+  
   private fetchFromReddit(subreddit: string, after: string | null, gifsRequired: number) {
     return this.http
-      .get<RedditResponse>(`https://www.reddit.com/r/${subreddit}/hot/.json?limit=100` + (after ? `&after=${after}` : ''))
-      .pipe(
-        catchError((err) => {
-          this.handleError(err);
-          return EMPTY;
-        }),
-        map((response) => {
-          const posts = response.data.children;
-          const lastKnownGif = posts.length ? posts[posts.length - 1].data.name : null;
-
-          return {
-            gifs: this.convertRedditPostsToGifs(response.data.children),
-            gifsRequired,
-            lastKnownGif,
-          };
-        })
-      );
+    .get<RedditResponse>(`https://www.reddit.com/r/${subreddit}/hot/.json?limit=100` + (after ? `&after=${after}` : ''))
+    .pipe(
+      catchError((err) => {
+        this.handleError(err);
+        return EMPTY;
+      }),
+      map((response) => {
+        const posts = response.data.children;
+        const lastKnownGif = posts.length ? posts[posts.length - 1].data.name : null;
+        
+        return {
+          gifs: this.convertRedditPostsToGifs(response.data.children),
+          gifsRequired,
+          lastKnownGif,
+        };
+      })
+    );
   }
-
+  
   private convertRedditPostsToGifs(posts: RedditPost[]): Gif[] {
     const defaultThumbnails = ['default', 'none', 'nsfw'];
-
+    
     return posts.map((post) => {
       const thumbnail = post.data.thumbnail;
       const modifiedThumbnail= defaultThumbnails.includes(thumbnail)
-        ? `/assets/${thumbnail}.png`
-        : thumbnail;
+      ? `/assets/${thumbnail}.png`
+      : thumbnail;
       
       const validThumbnail = modifiedThumbnail.endsWith('.jpg') || modifiedThumbnail.endsWith('.png');
-
+      
       return {
         src: this.getBestSrcForGif(post),
         author: post.data.author,
@@ -153,41 +155,46 @@ export class RedditService {
     })
     .filter((post): post is Gif => post.src !== null);
   }
-
+  
   private getBestSrcForGif(post: RedditPost): string | null{
     if (post.data.url.indexOf('.mp4') > -1) {
       return post.data.url;
     }
-
+    
     if (post.data.url.indexOf('.gifv') > -1) {
       return post.data.url.replace('.gifv', '.mp4');
     }
-
+    
     if (post.data.url.indexOf('.webm') > -1) {
       return post.data.url.replace('.webm', '.mp4');
     }
-
+    
     if (post.data.secure_media?.reddit_video) {
       return post.data.secure_media.reddit_video.fallback_url;
     }
-
+    
     if (post.data.media?.reddit_video) {
       return post.data.media.reddit_video.fallback_url;
     }
-
+    
     if (post.data.preview?.reddit_video_preview) {
       return post.data.preview.reddit_video_preview.fallback_url;
     }
-
+    
     return null;
   }
-
+  
   private handleError(err: HttpErrorResponse) {
     if (err.status === 404 && err.url) {
       this.error$.next(`Failed to load gifs for /r/${err.url.split('/')[4]}`);
       return;
     }
-
+    
     this.error$.next(err.statusText);
+  }
+
+  private getRandomSubreddit() {
+    var subr = SubredditsList();
+    return subr[Math.floor(Math.random() * subr.length)];
   }
 }
